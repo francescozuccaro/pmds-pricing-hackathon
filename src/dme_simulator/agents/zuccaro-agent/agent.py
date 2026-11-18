@@ -24,6 +24,7 @@ INIT_PRICE_MULT = 6.0       # first reference price = recipe reserve cost * this
 CORE = (1.0, 1.1, 0.9)      # core rungs (x reference), in listing order
 PROBE = 1.6                 # one unit at reference * PROBE to catch rich buyers
 PROBE_MIN_STOCK = 2         # only probe when the shelf has at least this many
+PROBE_SHARE = 0.0           # share of the shelf placed on the probe rung (min 1 unit)
 # reference-price moves by core sell-through f = sold / listed
 STEP_SOLDOUT = 1.08        # f == 1
 STEP_GOOD = 1.00            # f >= GOOD_F
@@ -31,6 +32,11 @@ GOOD_F = 0.6
 STEP_SOME = 0.96            # 0 < f < GOOD_F
 STEP_NONE = 0.92            # f == 0
 STEP_PROBE = 1.06           # probe unit sold
+# elasticity check: if cutting the price did not raise profit, undo the cut
+ELAST_W = 0                 # window (turns) compared; 0 = off
+ELAST_CUT = 0.08            # only judge after the price fell at least this much
+ELAST_GAIN = 1.0            # cut is "useful" only if profit rose above old * this
+STEP_REVERT = 1.06          # price move when a cut proved useless
 FLOOR_REPLACEMENT = False   # floor on replacement cost instead of paid cost
 MIN_MARGIN = 1.25           # lowest rung never below unit cost * this
 
@@ -84,6 +90,9 @@ class ZuccaroAgent(BaseAgent):
         self.last_ladder = {}   # good -> [(price, qty)] listed last turn
         self.last_bid = {}      # material -> units requested last turn
         self.sold_hist = {}     # good -> recent units sold per turn
+        self.price_hist = {}    # good -> recent (reference price, profit) per turn
+        self.last_ref = {}      # good -> reference price used when listing
+        self.last_cost = {}     # good -> unit cost when listing
         self.rev_hist = []      # recent revenue per turn
         self.start_capital = None
         self.n_sales = 0
@@ -188,13 +197,27 @@ class ZuccaroAgent(BaseAgent):
 
             ref = self.ref_price[good]
             qty = self.qty[good]
+            cost = self.last_cost.get(good, 0.0)
+            ph = self.price_hist.setdefault(good, [])
+            ph.append((self.last_ref.get(good, ref), sum((p - cost) * q for p, q in sales)))
+            del ph[:-2 * max(1, ELAST_W)]
             if core_listed > 0:
                 f = core_sold / core_listed
                 if f >= 1.0:
                     ref *= STEP_SOLDOUT
                     qty = max(qty, core_sold) * QTY_GROW
                 else:
-                    ref *= STEP_GOOD if f >= GOOD_F else (STEP_SOME if f > 0 else STEP_NONE)
+                    step = STEP_GOOD if f >= GOOD_F else (STEP_SOME if f > 0 else STEP_NONE)
+                    if step == STEP_SOME and ELAST_W and len(ph) >= 2 * ELAST_W:
+                        old, new = ph[:ELAST_W], ph[ELAST_W:]
+                        p0 = sum(x for x, _ in old) / ELAST_W
+                        p1 = sum(x for x, _ in new) / ELAST_W
+                        g0 = sum(y for _, y in old) / ELAST_W
+                        g1 = sum(y for _, y in new) / ELAST_W
+                        if p1 < p0 * (1 - ELAST_CUT) and g1 <= g0 * ELAST_GAIN:
+                            step = STEP_REVERT   # the cut bought no profit: undo it
+                            ph.clear()
+                    ref *= step
                     qty = (1 - QTY_EMA) * qty + QTY_EMA * core_sold * QTY_HEADROOM
             if probe_sold:
                 ref *= STEP_PROBE
@@ -323,7 +346,9 @@ class ZuccaroAgent(BaseAgent):
             if stock <= 0:
                 continue
             ref = self.ref_price[good]
-            probe = 1 if stock >= PROBE_MIN_STOCK else 0
+            self.last_ref[good] = ref
+            self.last_cost[good] = self._unit_cost(recipe_for[good][1])
+            probe = max(1, int(PROBE_SHARE * stock)) if stock >= PROBE_MIN_STOCK else 0
             core = stock - probe
             n = len(CORE)
             per = [core // n + (1 if i < core % n else 0) for i in range(n)]
@@ -332,7 +357,7 @@ class ZuccaroAgent(BaseAgent):
                 if q > 0:
                     ladder.append((round(ref * mult, 2), q, False))
             if probe:
-                ladder.append((round(ref * PROBE, 2), 1, True))
+                ladder.append((round(ref * PROBE, 2), probe, True))
             for p, q, _ in ladder:
                 listings.append(Listing(good, q, p))
             self.last_ladder[good] = ladder
