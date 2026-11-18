@@ -99,13 +99,19 @@ class ZuccaroAgent(BaseAgent):
         return self.team_id is None or who == self.team_id
 
     def _infer_team_id(self, state):
-        matches = [
+        """Find our team among the public entries (re-checked every turn).
+
+        Teams whose capital and inventory equal ours are indistinguishable from
+        us so far; any of them gives the same statistics, so we keep the current
+        pick while it stays consistent and otherwise take the first match.
+        """
+        matches = sorted(
             tid for tid, cap in state.public_capital.items()
             if abs(_finite(cap) - state.capital) < 1e-6
             and state.public_inventories.get(tid) == state.inventory
-        ]
-        if len(matches) == 1:
-            self.team_id = matches[0]
+        )
+        if self.team_id not in matches:
+            self.team_id = matches[0] if matches else None
 
     # ---------------------------------------------------------------- learning
     def _learn(self, state):
@@ -188,8 +194,7 @@ class ZuccaroAgent(BaseAgent):
             return Decision()  # never crash: an empty decision is always valid
 
     def _decide(self, state, gc):
-        if self.team_id is None:
-            self._infer_team_id(state)
+        self._infer_team_id(state)
         lots = {}
         for lot in state.auction_lots:
             r = _finite(lot.reserve_price)

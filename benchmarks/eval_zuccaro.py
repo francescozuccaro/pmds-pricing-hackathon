@@ -52,6 +52,8 @@ SCENARIOS = {
     "default_strong": (ROOT / "config/default.yaml", STRONG_SMALL, None),
     "extended_strong": (ROOT / "benchmarks/configs/default_extended.yaml", STRONG_LARGE, None),
     "highdemand_strong": (ROOT / "benchmarks/configs/high_demand.yaml", STRONG_LARGE, None),
+    "observe_all": (ROOT / "benchmarks/configs/observe_all.yaml", STRONG_LARGE, None),
+    "capacity_cap": (ROOT / "benchmarks/configs/capacity_cap.yaml", STRONG_LARGE, None),
     "tut_pricing": (ROOT / "config/tutorial_pricing.yaml", SMALL_ROSTER, None),
     "tut_auction": (ROOT / "config/tutorial_auction.yaml", SMALL_ROSTER, None),
 }
