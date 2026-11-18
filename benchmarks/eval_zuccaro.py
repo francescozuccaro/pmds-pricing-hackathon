@@ -54,6 +54,16 @@ REAL_LARGE = {"sparring-selfplay": 5, "sparring-cautious": 12, "DummyAgent": 8,
               "PriceWarAgent": 5, "PatientAgent": 5, "sparring-clone": 2,
               "sparring-aggressive": 2}
 
+# Fewer cheap sellers, many starter-like and cautious teams.
+REAL2_LARGE = {"sparring-starter": 14, "sparring-cautious": 10, "sparring-selfplay": 5,
+               "PriceWarAgent": 3, "DummyAgent": 2, "PatientAgent": 3,
+               "sparring-clone": 1, "sparring-aggressive": 1}
+
+# Price-discovery / ramp benchmark: we are the only seller.
+MONOPOLY = {"PatientAgent": 39}
+# High-price field: rivals that sell slowly at value-ish prices.
+HIGHPRICE = {"sparring-cautious": 20, "sparring-starter": 10, "PatientAgent": 9}
+
 SCENARIOS = {
     "default": (ROOT / "config/default.yaml", SMALL_ROSTER, None),
     "scaled": (ROOT / "config/scaled_market.yaml", SMALL_ROSTER, None),
@@ -70,6 +80,9 @@ SCENARIOS = {
     "ext_arena": (ROOT / "benchmarks/configs/default_extended.yaml", ARENA_LARGE, None),
     "hd_arena": (ROOT / "benchmarks/configs/high_demand.yaml", ARENA_LARGE, None),
     "ext_real": (ROOT / "benchmarks/configs/default_extended.yaml", REAL_LARGE, None),
+    "ext_real2": (ROOT / "benchmarks/configs/default_extended.yaml", REAL2_LARGE, None),
+    "ext_monopoly": (ROOT / "benchmarks/configs/default_extended.yaml", MONOPOLY, None),
+    "ext_highprice": (ROOT / "benchmarks/configs/default_extended.yaml", HIGHPRICE, None),
     "tut_pricing": (ROOT / "config/tutorial_pricing.yaml", SMALL_ROSTER, None),
     "tut_auction": (ROOT / "config/tutorial_auction.yaml", SMALL_ROSTER, None),
 }

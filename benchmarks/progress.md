@@ -40,3 +40,10 @@ Screening 3 seed; "rank" = rank medio complessivo (più basso = meglio). Campion
 | 13 | hotfix (caldo solo >12 team, materiali <= prezzo minimo) | — | — | — | tut_auction@240 rank 3.6 -> 1.0 | sì (v11) |
 
 v11 full (hot05): extended@240 53,978 (min 51,124, rank 1.0); default@240 140,868; extended@40/80 = 46,309 / 48,909.
+| 14 | gf40 (GOOD_F 0.4) full 10 seed 40/80/120/240 | rank 1.89 vs v11 1.71 | monopolio@80 389k vs 332k | tut_auction rank 4.0 | +0.18 | no |
+| 14 | gf30 full | rank 2.11 | monopolio@80 405k | tut_auction rank 4.0 | +0.40 | no |
+| 15 | some985 / some99p8 (discesa prezzo più lenta) | 1.65 / 1.60 vs 1.60 | monopolio@240 +55-62% | tut_pricing/highdemand peggio | ~0 | no |
+| — | cornering DENY_SHARE 0.5/0.9 (ext_real2) | — | capitale 38k/32k a 80 turni | drawdown 27-52% | — | no |
+
+Campione finale: v11 (commit 3fecc1f). Full suite 10 seed x 40/80/120/240, 14 scenari: rank medio 1.71.
+v11 a 80 turni: ext_monopoly 332k, ext_highprice 154k, extended 48.9k, default 77k.
