@@ -21,6 +21,8 @@ from dme_simulator.config import GoodsConfig
 
 # ---------------------------------------------------------------- tunables
 INIT_PRICE_MULT = 6.0       # first reference price = recipe reserve cost * this
+INIT_PRICE_CROWD = 6.0      # same, in a crowded market (more sellers -> lower start)
+STEP_NONE_CROWD = 0.92      # price cut when nothing sold, in a crowded market
 CORE = (1.0, 1.1, 0.9)      # core rungs (x reference), in listing order
 PROBE = 1.6                 # one unit at reference * PROBE to catch rich buyers
 PROBE_MIN_STOCK = 2         # only probe when the shelf has at least this many
@@ -61,6 +63,7 @@ CROWD_TEAMS = 12            # with more teams than this the market counts as cro
 BID_INIT_CROWD = 1.3        # first bid in a crowded market (don't fight early)
 # "hot" market: enough rivals are already making money, so the goods sell at
 # prices that justify outbidding them -> lift our value cap to at least HOT_CAP
+CROWD_CAP = 99.0            # crowded but not hot: never bid above reserve * this
 HOT_GAIN = 1.05             # a rival counts as winning above start capital * this
 HOT_SHARE = 0.05            # market is hot when this share of rivals is winning
 HOT_CAP = 5.0               # minimum bid cap (x reserve) in a hot crowded market...
@@ -104,6 +107,7 @@ class ZuccaroAgent(BaseAgent):
         self.pmult = {}         # good -> premium tier multiplier
         self.rev_hist = []      # recent revenue per turn
         self.start_capital = None
+        self.crowded = False
         self.n_sales = 0
         self.n_auction = 0
 
@@ -220,7 +224,8 @@ class ZuccaroAgent(BaseAgent):
                     ref *= STEP_SOLDOUT
                     qty = max(qty, core_sold) * QTY_GROW
                 else:
-                    step = STEP_GOOD if f >= GOOD_F else (STEP_SOME if f > 0 else STEP_NONE)
+                    none = STEP_NONE_CROWD if self.crowded else STEP_NONE
+                    step = STEP_GOOD if f >= GOOD_F else (STEP_SOME if f > 0 else none)
                     if step == STEP_SOME and ELAST_W and len(ph) >= 2 * ELAST_W:
                         old, new = ph[:ELAST_W], ph[ELAST_W:]
                         p0 = sum(x for x, _ in old) / ELAST_W
@@ -250,6 +255,7 @@ class ZuccaroAgent(BaseAgent):
 
     def _decide(self, state, gc):
         self._infer_team_id(state)
+        self.crowded = len(state.public_capital) > CROWD_TEAMS
         lots = {}
         for lot in state.auction_lots:
             r = _finite(lot.reserve_price)
@@ -272,13 +278,15 @@ class ZuccaroAgent(BaseAgent):
 
         for good, (_, r) in recipe_for.items():
             if good not in self.ref_price:
-                self.ref_price[good] = max(1.0, INIT_PRICE_MULT * self._reserve_cost(r))
+                mult = INIT_PRICE_CROWD if self.crowded else INIT_PRICE_MULT
+                self.ref_price[good] = max(1.0, mult * self._reserve_cost(r))
             self.qty.setdefault(good, INIT_QTY)
 
         self._learn(state)
         if self.start_capital is None:
             self.start_capital = _finite(state.capital)
         guard = _finite(state.capital) < (self.start_capital or 0.0) * GUARD_SHARE
+        crowded = len(state.public_capital) > CROWD_TEAMS
         rivals = [_finite(c) for t, c in state.public_capital.items() if t != self.team_id]
         winning = sum(1 for c in rivals if c > (self.start_capital or 0.0) * HOT_GAIN)
         # only crowded markets lock out late entrants, so only there we lift the cap
@@ -337,6 +345,8 @@ class ZuccaroAgent(BaseAgent):
                     rc = max(1e-6, self._reserve_cost(r))
                     caps.append(self.ref_price[good] * min(CORE) * MAX_COST_SHARE / rc)
             cap_mult = max(BID_MIN, min(caps)) if caps else BID_MIN
+            if crowded and not hot:
+                cap_mult = min(cap_mult, CROWD_CAP)
             if hot:
                 ceiling = min(
                     (self.ref_price[g] * min(CORE) * HOT_COST_SHARE

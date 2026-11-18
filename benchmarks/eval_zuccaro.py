@@ -64,6 +64,11 @@ MONOPOLY = {"PatientAgent": 39}
 # High-price field: rivals that sell slowly at value-ish prices.
 HIGHPRICE = {"sparring-cautious": 20, "sparring-starter": 10, "PatientAgent": 9}
 
+# Auction-heavy field: many rivals that bid hard from turn 1.
+HARD_LARGE = {"sparring-aggressive": 8, "sparring-selfplay": 10, "sparring-clone": 6,
+              "PriceWarAgent": 4, "DummyAgent": 4, "PatientAgent": 2,
+              "sparring-starter": 3, "sparring-cautious": 2}
+
 SCENARIOS = {
     "default": (ROOT / "config/default.yaml", SMALL_ROSTER, None),
     "scaled": (ROOT / "config/scaled_market.yaml", SMALL_ROSTER, None),
@@ -84,6 +89,8 @@ SCENARIOS = {
     "ext_monopoly": (ROOT / "benchmarks/configs/default_extended.yaml", MONOPOLY, None),
     "ext_highprice": (ROOT / "benchmarks/configs/default_extended.yaml", HIGHPRICE, None),
     "default_crowd": (ROOT / "config/default.yaml", REAL2_LARGE, None),
+    "default_hard": (ROOT / "config/default.yaml", HARD_LARGE, None),
+    "ext_hard": (ROOT / "benchmarks/configs/default_extended.yaml", HARD_LARGE, None),
     "tut_pricing": (ROOT / "config/tutorial_pricing.yaml", SMALL_ROSTER, None),
     "tut_auction": (ROOT / "config/tutorial_auction.yaml", SMALL_ROSTER, None),
 }
