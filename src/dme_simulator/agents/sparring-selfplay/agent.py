@@ -26,17 +26,18 @@ CORE = (1.0, 1.1, 0.9)      # core rungs (x reference), in listing order
 PROBE = 1.6                 # one unit at reference * PROBE to catch rich buyers
 PROBE_MIN_STOCK = 2         # only probe when the shelf has at least this many
 # reference-price moves by core sell-through f = sold / listed
-STEP_SOLDOUT = 1.05         # f == 1
+STEP_SOLDOUT = 1.08        # f == 1
 STEP_GOOD = 1.00            # f >= GOOD_F
 GOOD_F = 0.6
 STEP_SOME = 0.96            # 0 < f < GOOD_F
 STEP_NONE = 0.92            # f == 0
 STEP_PROBE = 1.06           # probe unit sold
+FLOOR_REPLACEMENT = False   # floor on replacement cost instead of paid cost
 MIN_MARGIN = 1.25           # lowest rung never below unit cost * this
 
 INIT_QTY = 4.0  # initial core shelf quantity per good
 QTY_GROW = 1.6  # sold out -> grow core quantity
-QTY_EMA = 0.3               # otherwise move toward sold * QTY_HEADROOM
+QTY_EMA = 0.6               # otherwise move toward sold * QTY_HEADROOM
 QTY_HEADROOM = 2.0  
 QTY_MIN = 1.0
 # safety: shelf quantity never far above what we have actually sold recently
@@ -44,8 +45,8 @@ QTY_CAP_MULT = 3.0          # cap = mult * best recent turn + add
 QTY_CAP_ADD = 12.0
 HIST_LEN = 6                # turns of sales/revenue history kept
 
-BID_INIT = 1.5  # first bid = reserve * this
-BID_UP = 1.35              # partial fill -> raise multiplier
+BID_INIT = 2.0             # first bid = reserve * this
+BID_UP = 1.6               # partial fill -> raise multiplier
 BID_DOWN = 0.88            # full fill    -> lower multiplier
 BID_MIN = 1.0
 BID_MAX = 5.0  
@@ -91,6 +92,11 @@ class SparringSelfplayAgent(BaseAgent):
     def _unit_cost(self, recipe):
         return sum(self._mat_cost(m) * q for m, q in recipe.inputs.items())
 
+    def _replacement_cost(self, recipe):
+        """What one unit would cost to rebuild at today's reserve and bid level."""
+        return sum(self.reserve.get(m, self._mat_cost(m)) * self.bid_mult.get(m, 1.0) * q
+                   for m, q in recipe.inputs.items())
+
     def _reserve_cost(self, recipe):
         return sum(self.reserve.get(m, self._mat_cost(m)) * q
                    for m, q in recipe.inputs.items())
@@ -100,13 +106,19 @@ class SparringSelfplayAgent(BaseAgent):
         return self.team_id is None or who == self.team_id
 
     def _infer_team_id(self, state):
-        matches = [
+        """Find our team among the public entries (re-checked every turn).
+
+        Teams whose capital and inventory equal ours are indistinguishable from
+        us so far; any of them gives the same statistics, so we keep the current
+        pick while it stays consistent and otherwise take the first match.
+        """
+        matches = sorted(
             tid for tid, cap in state.public_capital.items()
             if abs(_finite(cap) - state.capital) < 1e-6
             and state.public_inventories.get(tid) == state.inventory
-        ]
-        if len(matches) == 1:
-            self.team_id = matches[0]
+        )
+        if self.team_id not in matches:
+            self.team_id = matches[0] if matches else None
 
     # ---------------------------------------------------------------- learning
     def _learn(self, state):
@@ -189,8 +201,7 @@ class SparringSelfplayAgent(BaseAgent):
             return Decision()  # never crash: an empty decision is always valid
 
     def _decide(self, state, gc):
-        if self.team_id is None:
-            self._infer_team_id(state)
+        self._infer_team_id(state)
         lots = {}
         for lot in state.auction_lots:
             r = _finite(lot.reserve_price)
@@ -219,7 +230,9 @@ class SparringSelfplayAgent(BaseAgent):
 
         # price floor from what materials really cost us
         for good, (_, r) in recipe_for.items():
-            floor = self._unit_cost(r) * MIN_MARGIN / min(CORE)
+            # paid cost is sunk: optionally price against what a new unit costs now
+            cost = self._replacement_cost(r) if FLOOR_REPLACEMENT else self._unit_cost(r)
+            floor = cost * MIN_MARGIN / min(CORE)
             self.ref_price[good] = max(self.ref_price[good], floor, 1.0)
 
         inv = {k: int(v) for k, v in state.inventory.items()}

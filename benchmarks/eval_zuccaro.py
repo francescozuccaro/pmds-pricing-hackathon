@@ -42,6 +42,18 @@ STRONG_LARGE = {
     "sparring-cautious": 6, "DummyAgent": 5, "PriceWarAgent": 5, "PatientAgent": 1,
 }
 
+# Arenas: many copies of the frozen champion; a better candidate ranks above them.
+ARENA_SMALL = {"sparring-selfplay": 3, "sparring-clone": 1, "PriceWarAgent": 1,
+               "sparring-cautious": 1}
+ARENA_LARGE = {"sparring-selfplay": 15, "sparring-clone": 6, "sparring-aggressive": 4,
+               "sparring-cautious": 6, "DummyAgent": 4, "PriceWarAgent": 4}
+
+# Closer to the public leaderboard: few floor-price dumpers, many slow/cautious
+# teams, a handful of capable rivals (copies of our champion).
+REAL_LARGE = {"sparring-selfplay": 5, "sparring-cautious": 12, "DummyAgent": 8,
+              "PriceWarAgent": 5, "PatientAgent": 5, "sparring-clone": 2,
+              "sparring-aggressive": 2}
+
 SCENARIOS = {
     "default": (ROOT / "config/default.yaml", SMALL_ROSTER, None),
     "scaled": (ROOT / "config/scaled_market.yaml", SMALL_ROSTER, None),
@@ -54,6 +66,10 @@ SCENARIOS = {
     "highdemand_strong": (ROOT / "benchmarks/configs/high_demand.yaml", STRONG_LARGE, None),
     "observe_all": (ROOT / "benchmarks/configs/observe_all.yaml", STRONG_LARGE, None),
     "capacity_cap": (ROOT / "benchmarks/configs/capacity_cap.yaml", STRONG_LARGE, None),
+    "default_arena": (ROOT / "config/default.yaml", ARENA_SMALL, None),
+    "ext_arena": (ROOT / "benchmarks/configs/default_extended.yaml", ARENA_LARGE, None),
+    "hd_arena": (ROOT / "benchmarks/configs/high_demand.yaml", ARENA_LARGE, None),
+    "ext_real": (ROOT / "benchmarks/configs/default_extended.yaml", REAL_LARGE, None),
     "tut_pricing": (ROOT / "config/tutorial_pricing.yaml", SMALL_ROSTER, None),
     "tut_auction": (ROOT / "config/tutorial_auction.yaml", SMALL_ROSTER, None),
 }
@@ -115,29 +131,41 @@ def main() -> None:
     parser.add_argument("--seed-base", type=int, default=100)
     parser.add_argument("--turns", type=int, default=None)
     parser.add_argument("--workers", type=int, default=8)
+    parser.add_argument("--horizons", type=int, nargs="+", default=None,
+                        help="run every scenario at each of these turn counts "
+                             "(the official ranking averages short and long games)")
     parser.add_argument("--label", default="latest")
     args = parser.parse_args()
 
+    horizons = args.horizons or [args.turns]
     jobs = [
-        {"scenario": s, "seed": args.seed_base + i, "turns": args.turns,
+        {"scenario": s, "seed": args.seed_base + i, "turns": h,
          "candidate": str(args.candidate.resolve())}
-        for s in args.scenarios for i in range(args.seeds)
+        for s in args.scenarios for h in horizons for i in range(args.seeds)
     ]
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
         results = list(pool.map(_run, jobs))
+    for job, r in zip(jobs, results):
+        r["horizon"] = job["turns"]
+        if job["turns"]:
+            r["scenario"] = f"{job['scenario']}@{job['turns']}"
+    rows = list(dict.fromkeys(r["scenario"] for r in results))
 
     print(f"\n[{args.label}] candidate={args.candidate}")
-    print(f"{'scenario':<15}{'mean cap':>13}{'min cap':>13}{'best other':>13}"
+    print(f"{'scenario':<22}{'mean cap':>13}{'min cap':>13}{'best other':>13}"
           f"{'mean rank':>11}{'worst':>7}{'max ms':>8}{'end inv':>9}")
-    for s in args.scenarios:
+    for s in rows:
         rs = [r for r in results if r["scenario"] == s]
         caps = [r["capital"] for r in rs]
         ranks = [r["rank"] for r in rs]
-        print(f"{s:<15}{statistics.mean(caps):>13,.0f}{min(caps):>13,.0f}"
+        print(f"{s:<22}{statistics.mean(caps):>13,.0f}{min(caps):>13,.0f}"
               f"{statistics.mean(r['best_other'] for r in rs):>13,.0f}"
               f"{statistics.mean(ranks):>8.2f}/{rs[0]['teams']:<2}{max(ranks):>7.1f}"
               f"{max(r['max_ms'] for r in rs):>8.1f}"
               f"{statistics.mean(r['end_inventory'] for r in rs):>9.0f}")
+    print(f"OVERALL mean rank {statistics.mean(r['rank'] for r in results):.3f}  "
+          f"worst {max(r['rank'] for r in results):g}  "
+          f"rows not won: {sum(1 for s in rows if any(r['rank'] > 1 for r in results if r['scenario'] == s))}/{len(rows)}")
     out = ROOT / "benchmarks" / "results"
     out.mkdir(exist_ok=True)
     (out / f"{args.label}.json").write_text(json.dumps(results, indent=1))

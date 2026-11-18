@@ -42,8 +42,17 @@ QTY_MIN = 1.0
 # safety: shelf quantity never far above what we have actually sold recently
 QTY_CAP_MULT = 3.0          # cap = mult * best recent turn + add
 QTY_CAP_ADD = 12.0
+GUARD_SHARE = 0.0           # below start capital * this, stop refilling unsold goods
 HIST_LEN = 6                # turns of sales/revenue history kept
 
+CROWD_TEAMS = 12            # with more teams than this the market counts as crowded
+BID_INIT_CROWD = 1.3        # first bid in a crowded market (don't fight early)
+# "hot" market: enough rivals are already making money, so the goods sell at
+# prices that justify outbidding them -> lift our value cap to at least HOT_CAP
+HOT_GAIN = 1.05             # a rival counts as winning above start capital * this
+HOT_SHARE = 0.05            # market is hot when this share of rivals is winning
+HOT_CAP = 5.0               # minimum bid cap (x reserve) in a hot crowded market...
+HOT_COST_SHARE = 1.0        # ...but materials never above this share of bottom-rung price
 BID_INIT = 2.0             # first bid = reserve * this
 BID_UP = 1.6               # partial fill -> raise multiplier
 BID_DOWN = 0.88            # full fill    -> lower multiplier
@@ -76,6 +85,7 @@ class ZuccaroAgent(BaseAgent):
         self.last_bid = {}      # material -> units requested last turn
         self.sold_hist = {}     # good -> recent units sold per turn
         self.rev_hist = []      # recent revenue per turn
+        self.start_capital = None
         self.n_sales = 0
         self.n_auction = 0
 
@@ -208,7 +218,8 @@ class ZuccaroAgent(BaseAgent):
                 continue
             lots[lot.good] = lot
             self.reserve[lot.good] = r
-            self.bid_mult.setdefault(lot.good, BID_INIT)
+            crowded = len(state.public_capital) > CROWD_TEAMS
+            self.bid_mult.setdefault(lot.good, BID_INIT_CROWD if crowded else BID_INIT)
 
         # one (cheapest) recipe per finished good
         finished = set(gc.finished_goods)
@@ -226,6 +237,14 @@ class ZuccaroAgent(BaseAgent):
             self.qty.setdefault(good, INIT_QTY)
 
         self._learn(state)
+        if self.start_capital is None:
+            self.start_capital = _finite(state.capital)
+        guard = _finite(state.capital) < (self.start_capital or 0.0) * GUARD_SHARE
+        rivals = [_finite(c) for t, c in state.public_capital.items() if t != self.team_id]
+        winning = sum(1 for c in rivals if c > (self.start_capital or 0.0) * HOT_GAIN)
+        # only crowded markets lock out late entrants, so only there we lift the cap
+        hot = (bool(rivals) and len(state.public_capital) > CROWD_TEAMS
+               and winning >= HOT_SHARE * len(rivals))
 
         # price floor from what materials really cost us
         for good, (_, r) in recipe_for.items():
@@ -245,6 +264,8 @@ class ZuccaroAgent(BaseAgent):
         plan = {}
         for good, _ in ranked:
             target = ceil(self.qty[good]) + 1  # +1 for the probe unit
+            if guard and inv.get(good, 0) > 0 and not any(self.sold_hist.get(good, [])):
+                target = 0  # losing money and this good is not moving: stop refilling
             plan[good] = max(0, target - inv.get(good, 0))
 
         # ---- materials needed beyond what we hold
@@ -274,6 +295,13 @@ class ZuccaroAgent(BaseAgent):
                     rc = max(1e-6, self._reserve_cost(r))
                     caps.append(self.ref_price[good] * min(CORE) * MAX_COST_SHARE / rc)
             cap_mult = max(BID_MIN, min(caps)) if caps else BID_MIN
+            if hot:
+                ceiling = min(
+                    (self.ref_price[g] * min(CORE) * HOT_COST_SHARE
+                     / max(1e-6, self._reserve_cost(r)))
+                    for g, (_, r) in recipe_for.items()
+                    if m in r.inputs and plan.get(g, 0) > 0)
+                cap_mult = max(cap_mult, min(HOT_CAP, ceiling))
             price = reserve * min(self.bid_mult[m], cap_mult, BID_MAX)
             price = max(price, reserve) + 0.01
             qty = min(qty, int(budget // price)) if price > 0 else qty
