@@ -24,7 +24,13 @@ INIT_PRICE_MULT = 6.0       # first reference price = recipe reserve cost * this
 CORE = (1.0, 1.1, 0.9)      # core rungs (x reference), in listing order
 PROBE = 1.6                 # one unit at reference * PROBE to catch rich buyers
 PROBE_MIN_STOCK = 2         # only probe when the shelf has at least this many
-PROBE_SHARE = 0.0           # share of the shelf placed on the probe rung (min 1 unit)
+PROBE_SHARE = 0.0           # premium tier size = share of core quantity (min 1 unit),
+                            # stocked on top of the core shelf
+PM_ADAPT = False            # learn the premium multiplier per good
+PM_UP = 1.05                # premium tier sold      -> multiplier up
+PM_DOWN = 0.97              # premium tier unsold    -> multiplier down
+PM_MIN = 1.15
+PM_MAX = 4.0
 # reference-price moves by core sell-through f = sold / listed
 STEP_SOLDOUT = 1.08        # f == 1
 STEP_GOOD = 1.00            # f >= GOOD_F
@@ -66,6 +72,8 @@ BID_MIN = 1.0
 BID_MAX = 5.0  
 MAX_COST_SHARE = 0.75  # materials may cost at most this share of bottom-rung price
 BUDGET_SHARE = 0.4          # max share of capital committed in one auction
+CROWD_SPEND = 1.0           # crowded market: per-turn spend <= capital * this + revenue
+                            # earned in the last turns (1.0 = off)
 SPEND_REV_MULT = 1.0        # ...and at most this * recent mean revenue per turn
 SPEND_MIN_SHARE = 1.0       # 1.0 disables the revenue-based spend cap (it hurt growth)
 COST_EMA = 0.3              # smoothing of the price we actually paid
@@ -93,6 +101,7 @@ class ZuccaroAgent(BaseAgent):
         self.price_hist = {}    # good -> recent (reference price, profit) per turn
         self.last_ref = {}      # good -> reference price used when listing
         self.last_cost = {}     # good -> unit cost when listing
+        self.pmult = {}         # good -> premium tier multiplier
         self.rev_hist = []      # recent revenue per turn
         self.start_capital = None
         self.n_sales = 0
@@ -118,6 +127,10 @@ class ZuccaroAgent(BaseAgent):
     def _reserve_cost(self, recipe):
         return sum(self.reserve.get(m, self._mat_cost(m)) * q
                    for m, q in recipe.inputs.items())
+
+    def _premium_units(self, good):
+        """Units kept on the premium tier, on top of the core shelf."""
+        return max(1, int(round(PROBE_SHARE * ceil(self.qty.get(good, INIT_QTY)))))
 
     def _is_mine(self, who):
         # by default only our own transactions are visible
@@ -221,6 +234,9 @@ class ZuccaroAgent(BaseAgent):
                     qty = (1 - QTY_EMA) * qty + QTY_EMA * core_sold * QTY_HEADROOM
             if probe_sold:
                 ref *= STEP_PROBE
+            if PM_ADAPT and probe_listed:
+                pm = self.pmult.get(good, PROBE) * (PM_UP if probe_sold else PM_DOWN)
+                self.pmult[good] = min(PM_MAX, max(PM_MIN, pm))
             self.ref_price[good] = ref
             cap = QTY_CAP_MULT * max(hist) + QTY_CAP_ADD
             self.qty[good] = max(QTY_MIN, min(qty, cap))
@@ -286,7 +302,7 @@ class ZuccaroAgent(BaseAgent):
         ranked = sorted(recipe_for.items(), key=margin, reverse=True)
         plan = {}
         for good, _ in ranked:
-            target = ceil(self.qty[good]) + 1  # +1 for the probe unit
+            target = ceil(self.qty[good]) + self._premium_units(good)
             if guard and inv.get(good, 0) > 0 and not any(self.sold_hist.get(good, [])):
                 target = 0  # losing money and this good is not moving: stop refilling
             plan[good] = max(0, target - inv.get(good, 0))
@@ -299,6 +315,9 @@ class ZuccaroAgent(BaseAgent):
         bids = []
         capital = max(0.0, _finite(state.capital))
         budget = capital * BUDGET_SHARE
+        if len(state.public_capital) > CROWD_TEAMS:
+            # crowded: grow spending only as fast as goods actually turn into cash
+            budget = min(budget, capital * CROWD_SPEND + sum(self.rev_hist))
         if self.rev_hist:
             recent = sum(self.rev_hist) / len(self.rev_hist)
             budget = min(budget, max(capital * SPEND_MIN_SHARE, SPEND_REV_MULT * recent))
@@ -348,7 +367,8 @@ class ZuccaroAgent(BaseAgent):
             ref = self.ref_price[good]
             self.last_ref[good] = ref
             self.last_cost[good] = self._unit_cost(recipe_for[good][1])
-            probe = max(1, int(PROBE_SHARE * stock)) if stock >= PROBE_MIN_STOCK else 0
+            probe = (min(self._premium_units(good), stock - 1)
+                     if stock >= PROBE_MIN_STOCK else 0)
             core = stock - probe
             n = len(CORE)
             per = [core // n + (1 if i < core % n else 0) for i in range(n)]
@@ -357,7 +377,8 @@ class ZuccaroAgent(BaseAgent):
                 if q > 0:
                     ladder.append((round(ref * mult, 2), q, False))
             if probe:
-                ladder.append((round(ref * PROBE, 2), probe, True))
+                pm = self.pmult.get(good, PROBE) if PM_ADAPT else PROBE
+                ladder.append((round(ref * pm, 2), probe, True))
             for p, q, _ in ladder:
                 listings.append(Listing(good, q, p))
             self.last_ladder[good] = ladder

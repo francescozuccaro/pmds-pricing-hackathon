@@ -83,6 +83,7 @@ SCENARIOS = {
     "ext_real2": (ROOT / "benchmarks/configs/default_extended.yaml", REAL2_LARGE, None),
     "ext_monopoly": (ROOT / "benchmarks/configs/default_extended.yaml", MONOPOLY, None),
     "ext_highprice": (ROOT / "benchmarks/configs/default_extended.yaml", HIGHPRICE, None),
+    "default_crowd": (ROOT / "config/default.yaml", REAL2_LARGE, None),
     "tut_pricing": (ROOT / "config/tutorial_pricing.yaml", SMALL_ROSTER, None),
     "tut_auction": (ROOT / "config/tutorial_auction.yaml", SMALL_ROSTER, None),
 }

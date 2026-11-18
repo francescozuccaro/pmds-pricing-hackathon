@@ -47,3 +47,10 @@ v11 full (hot05): extended@240 53,978 (min 51,124, rank 1.0); default@240 140,86
 
 Campione finale: v11 (commit 3fecc1f). Full suite 10 seed x 40/80/120/240, 14 scenari: rank medio 1.71.
 v11 a 80 turni: ext_monopoly 332k, ext_highprice 154k, extended 48.9k, default 77k.
+| 16 | el4 / el3g11 (test di elasticità) | 1.61 / 1.60 vs 1.60 | monopolio@80 +14% | highdemand -9%, hd_arena -11% | ~0 | no |
+| 17 | ps40p20 (40% stock a 2x) | 1.50 | ext_arena@240 rank 5.7 -> 1.7 | tut_auction rank 2 (97k -> 35k) | -0.10 | no |
+| 18 | tier40 (fascia premium in aggiunta + moltiplicatore appreso) | **1.39** | ext_arena@80 rank 1.7 | tut_pricing@240 rank 2.0 | -0.21 | promettente, manca test completo |
+| 19 | cs05 (tetto spesa 5% in mercati affollati) | 2.46 vs 1.71 | default_crowd@40 rank 3 -> 6 | — | +0.75 | no |
+
+Opzioni nel codice, tutte spente nel campione v11: ELAST_W, PROBE_SHARE/PM_ADAPT, CROWD_SPEND.
+Prossimo passo: test completo di tier40 (PROBE_SHARE=0.4, PROBE=2.0, PM_ADAPT=True).
