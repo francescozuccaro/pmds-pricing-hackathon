@@ -43,8 +43,8 @@ QTY_CAP_MULT = 3.0          # cap = mult * best recent turn + add
 QTY_CAP_ADD = 12.0
 HIST_LEN = 6                # turns of sales/revenue history kept
 
-BID_INIT = 1.5  # first bid = reserve * this
-BID_UP = 1.35              # partial fill -> raise multiplier
+BID_INIT = 2.0             # first bid = reserve * this
+BID_UP = 1.6               # partial fill -> raise multiplier
 BID_DOWN = 0.88            # full fill    -> lower multiplier
 BID_MIN = 1.0
 BID_MAX = 5.0  
