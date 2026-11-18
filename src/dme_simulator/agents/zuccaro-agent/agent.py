@@ -31,11 +31,12 @@ GOOD_F = 0.6
 STEP_SOME = 0.96            # 0 < f < GOOD_F
 STEP_NONE = 0.92            # f == 0
 STEP_PROBE = 1.06           # probe unit sold
+FLOOR_REPLACEMENT = False   # floor on replacement cost instead of paid cost
 MIN_MARGIN = 1.25           # lowest rung never below unit cost * this
 
 INIT_QTY = 4.0  # initial core shelf quantity per good
 QTY_GROW = 1.6  # sold out -> grow core quantity
-QTY_EMA = 0.3               # otherwise move toward sold * QTY_HEADROOM
+QTY_EMA = 0.6               # otherwise move toward sold * QTY_HEADROOM
 QTY_HEADROOM = 2.0  
 QTY_MIN = 1.0
 # safety: shelf quantity never far above what we have actually sold recently
@@ -89,6 +90,11 @@ class ZuccaroAgent(BaseAgent):
 
     def _unit_cost(self, recipe):
         return sum(self._mat_cost(m) * q for m, q in recipe.inputs.items())
+
+    def _replacement_cost(self, recipe):
+        """What one unit would cost to rebuild at today's reserve and bid level."""
+        return sum(self.reserve.get(m, self._mat_cost(m)) * self.bid_mult.get(m, 1.0) * q
+                   for m, q in recipe.inputs.items())
 
     def _reserve_cost(self, recipe):
         return sum(self.reserve.get(m, self._mat_cost(m)) * q
@@ -223,7 +229,9 @@ class ZuccaroAgent(BaseAgent):
 
         # price floor from what materials really cost us
         for good, (_, r) in recipe_for.items():
-            floor = self._unit_cost(r) * MIN_MARGIN / min(CORE)
+            # paid cost is sunk: optionally price against what a new unit costs now
+            cost = self._replacement_cost(r) if FLOOR_REPLACEMENT else self._unit_cost(r)
+            floor = cost * MIN_MARGIN / min(CORE)
             self.ref_price[good] = max(self.ref_price[good], floor, 1.0)
 
         inv = {k: int(v) for k, v in state.inventory.items()}
