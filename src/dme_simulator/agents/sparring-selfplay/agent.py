@@ -39,14 +39,20 @@ QTY_GROW = 1.6  # sold out -> grow core quantity
 QTY_EMA = 0.3               # otherwise move toward sold * QTY_HEADROOM
 QTY_HEADROOM = 2.0  
 QTY_MIN = 1.0
+# safety: shelf quantity never far above what we have actually sold recently
+QTY_CAP_MULT = 3.0          # cap = mult * best recent turn + add
+QTY_CAP_ADD = 12.0
+HIST_LEN = 6                # turns of sales/revenue history kept
 
 BID_INIT = 1.5  # first bid = reserve * this
-BID_UP = 1.25               # partial fill -> raise multiplier
-BID_DOWN = 0.97             # full fill    -> lower multiplier
+BID_UP = 1.35              # partial fill -> raise multiplier
+BID_DOWN = 0.88            # full fill    -> lower multiplier
 BID_MIN = 1.0
 BID_MAX = 5.0  
 MAX_COST_SHARE = 0.75  # materials may cost at most this share of bottom-rung price
 BUDGET_SHARE = 0.4          # max share of capital committed in one auction
+SPEND_REV_MULT = 1.0        # ...and at most this * recent mean revenue per turn
+SPEND_MIN_SHARE = 1.0       # 1.0 disables the revenue-based spend cap (it hurt growth)
 COST_EMA = 0.3              # smoothing of the price we actually paid
 
 
@@ -68,6 +74,8 @@ class SparringSelfplayAgent(BaseAgent):
         self.reserve = {}       # material -> latest reserve price
         self.last_ladder = {}   # good -> [(price, qty)] listed last turn
         self.last_bid = {}      # material -> units requested last turn
+        self.sold_hist = {}     # good -> recent units sold per turn
+        self.rev_hist = []      # recent revenue per turn
         self.n_sales = 0
         self.n_auction = 0
 
@@ -128,10 +136,15 @@ class SparringSelfplayAgent(BaseAgent):
             if self._is_mine(t.seller) and t.quantity > 0:
                 sold_at.setdefault(t.good, []).append((_finite(t.price), t.quantity))
         self.n_sales = len(txs)
+        self.rev_hist = (self.rev_hist + [sum(
+            p * q for v in sold_at.values() for p, q in v)])[-HIST_LEN:]
 
         for good, ladder in self.last_ladder.items():
             sales = sold_at.get(good, [])
             sold = sum(q for _, q in sales)
+            hist = self.sold_hist.setdefault(good, [])
+            hist.append(sold)
+            del hist[:-HIST_LEN]
             # we list all stock, so the real shelf was what is left plus what
             # sold; listings were honoured in listing order
             shelf = state.inventory.get(good, 0) + sold
@@ -165,7 +178,8 @@ class SparringSelfplayAgent(BaseAgent):
             if probe_sold:
                 ref *= STEP_PROBE
             self.ref_price[good] = ref
-            self.qty[good] = max(QTY_MIN, qty)
+            cap = QTY_CAP_MULT * max(hist) + QTY_CAP_ADD
+            self.qty[good] = max(QTY_MIN, min(qty, cap))
 
     # ---------------------------------------------------------------- decide
     def decide(self, state: Observation, goods_config: GoodsConfig) -> Decision:
@@ -227,7 +241,11 @@ class SparringSelfplayAgent(BaseAgent):
             for m, q in r.inputs.items():
                 need[m] = need.get(m, 0) + q * plan[good]
         bids = []
-        budget = max(0.0, _finite(state.capital)) * BUDGET_SHARE
+        capital = max(0.0, _finite(state.capital))
+        budget = capital * BUDGET_SHARE
+        if self.rev_hist:
+            recent = sum(self.rev_hist) / len(self.rev_hist)
+            budget = min(budget, max(capital * SPEND_MIN_SHARE, SPEND_REV_MULT * recent))
         self.last_bid = {}
         for m, total in need.items():
             lot = lots.get(m)
