@@ -35,6 +35,13 @@ LARGE_ROSTER = {
     "DummyAgent": 7, "PriceWarAgent": 6, "PatientAgent": 2,
 }
 
+# Strong field: several copies of our own (frozen) strategy.
+STRONG_SMALL = dict(SMALL_ROSTER, **{"sparring-selfplay": 2})
+STRONG_LARGE = {
+    "sparring-selfplay": 10, "sparring-clone": 6, "sparring-aggressive": 6,
+    "sparring-cautious": 6, "DummyAgent": 5, "PriceWarAgent": 5, "PatientAgent": 1,
+}
+
 SCENARIOS = {
     "default": (ROOT / "config/default.yaml", SMALL_ROSTER, None),
     "scaled": (ROOT / "config/scaled_market.yaml", SMALL_ROSTER, None),
@@ -42,6 +49,11 @@ SCENARIOS = {
     "highdemand": (ROOT / "benchmarks/configs/high_demand.yaml", LARGE_ROSTER, None),
     # same market, small roster: isolates our own scaling over 240 turns
     "extended_small": (ROOT / "benchmarks/configs/default_extended.yaml", SMALL_ROSTER, None),
+    "default_strong": (ROOT / "config/default.yaml", STRONG_SMALL, None),
+    "extended_strong": (ROOT / "benchmarks/configs/default_extended.yaml", STRONG_LARGE, None),
+    "highdemand_strong": (ROOT / "benchmarks/configs/high_demand.yaml", STRONG_LARGE, None),
+    "tut_pricing": (ROOT / "config/tutorial_pricing.yaml", SMALL_ROSTER, None),
+    "tut_auction": (ROOT / "config/tutorial_auction.yaml", SMALL_ROSTER, None),
 }
 
 

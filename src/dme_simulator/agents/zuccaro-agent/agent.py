@@ -39,12 +39,12 @@ QTY_EMA = 0.3               # otherwise move toward sold * QTY_HEADROOM
 QTY_HEADROOM = 2.0  
 QTY_MIN = 1.0
 
-BID_INIT = 1.30             # first bid = reserve * this
+BID_INIT = 1.5  # first bid = reserve * this
 BID_UP = 1.25               # partial fill -> raise multiplier
 BID_DOWN = 0.97             # full fill    -> lower multiplier
 BID_MIN = 1.0
-BID_MAX = 3.0
-MAX_COST_SHARE = 0.5        # materials may cost at most this share of bottom-rung price
+BID_MAX = 5.0  
+MAX_COST_SHARE = 0.75  # materials may cost at most this share of bottom-rung price
 BUDGET_SHARE = 0.4          # max share of capital committed in one auction
 COST_EMA = 0.3              # smoothing of the price we actually paid
 
