@@ -25,7 +25,7 @@ CORE = (1.0, 1.1, 0.9)      # core rungs (x reference), in listing order
 PROBE = 1.6                 # one unit at reference * PROBE to catch rich buyers
 PROBE_MIN_STOCK = 2         # only probe when the shelf has at least this many
 # reference-price moves by core sell-through f = sold / listed
-STEP_SOLDOUT = 1.05         # f == 1
+STEP_SOLDOUT = 1.08        # f == 1
 STEP_GOOD = 1.00            # f >= GOOD_F
 GOOD_F = 0.6
 STEP_SOME = 0.96            # 0 < f < GOOD_F
